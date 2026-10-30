@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0e0f13" />
+  <title>Last Meal</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <style>
+    :root {
+      --bg: #0e0f13;
+      --card: #16181f;
+      --fg: #f3f5f7;
+      --muted: #8a90a0;
+      --accent: #3ad07a;
+      --accent-press: #2fb569;
+      --line: #262a35;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+      display: flex; justify-content: center;
+      padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+    }
+    .app { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 18px; padding-top: 6vh; }
+    .label { color: var(--muted); font-size: 13px; letter-spacing: .14em; text-transform: uppercase; }
+    .card {
+      background: var(--card); border: 1px solid var(--line); border-radius: 20px;
+      padding: 24px; display: flex; flex-direction: column; gap: 10px;
+    }
+    .time { font-size: 56px; font-weight: 650; letter-spacing: -.02em; line-height: 1; }
+    .time.empty { color: var(--muted); font-size: 34px; font-weight: 500; }
+    .since { color: var(--muted); font-size: 15px; }
+    .since b { color: var(--fg); font-weight: 600; }
+    button {
+      font: inherit; border: none; border-radius: 16px; padding: 18px; cursor: pointer;
+      font-weight: 650; font-size: 18px; color: #06130b; background: var(--accent);
+      transition: transform .05s ease, background .15s ease;
+    }
+    button:active { transform: scale(.985); background: var(--accent-press); }
+    .ghost {
+      background: transparent; color: var(--muted); border: 1px solid var(--line);
+      font-size: 15px; font-weight: 500; padding: 13px;
+    }
+    .ghost:active { background: #1c1f28; transform: none; }
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; }
+    input[type="datetime-local"], input[type="url"] {
+      width: 100%; font: inherit; background: #0b0c10; color: var(--fg);
+      border: 1px solid var(--line); border-radius: 12px; padding: 12px; color-scheme: dark;
+    }
+    .edit { display: none; flex-direction: column; gap: 10px; }
+    .edit.open { display: flex; }
+    details { color: var(--muted); font-size: 13px; }
+    summary { cursor: pointer; padding: 6px 0; }
+    .status { font-size: 13px; color: var(--muted); min-height: 18px; text-align: center; }
+    .status.ok { color: var(--accent); }
+    .status.warn { color: #e2b23a; }
+    .hint { font-size: 12px; color: var(--muted); margin: 2px 0 0; }
+    a { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="label">Last meal</div>
+
+    <div class="card">
+      <div id="time" class="time empty">— not logged —</div>
+      <div id="since" class="since"></div>
+    </div>
+
+    <button id="ateNow">🍽&nbsp;&nbsp;Ate now</button>
+
+    <div class="row">
+      <button class="ghost" id="editToggle">Edit time</button>
+    </div>
+
+    <div class="edit" id="editBox">
+      <input type="datetime-local" id="editInput" />
+      <div class="row">
+        <button id="saveEdit">Save</button>
+        <button class="ghost" id="cancelEdit">Cancel</button>
+      </div>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <details id="settings">
+      <summary>Sheet sync settings</summary>
+      <p class="hint">Paste the Apps Script web-app URL (ends in <code>/exec</code>). Stored on this device only.</p>
+      <input type="url" id="endpoint" placeholder="https://script.google.com/macros/s/…/exec" inputmode="url" />
+      <div class="row" style="margin-top:10px">
+        <button class="ghost" id="saveEndpoint">Save URL</button>
+        <button class="ghost" id="syncNow">Sync now</button>
+      </div>
+    </details>
+  </div>
+
+  <script>
+    const K_MEAL = "lastMealISO";
+    const K_URL = "mealEndpointUrl";
+    const $ = (id) => document.getElementById(id);
+
+    const fmtTime = (d) =>
+      d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const fmtDay = (d) => {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const that = new Date(d); that.setHours(0,0,0,0);
+      const diff = Math.round((today - that) / 86400000);
+      if (diff === 0) return "today";
+      if (diff === 1) return "yesterday";
+      return d.toLocaleDateString([], { month: "short", day: "numeric" });
+    };
+    const localDate = (d) => {
+      const z = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
+    };
+    const toLocalInput = (d) => {
+      const z = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`;
+    };
+
+    function getMeal() {
+      const v = localStorage.getItem(K_MEAL);
+      return v ? new Date(v) : null;
+    }
+
+    function renderSince(d) {
+      if (!d) { $("since").textContent = ""; return; }
+      const mins = Math.max(0, Math.floor((Date.now() - d.getTime()) / 60000));
+      const h = Math.floor(mins / 60), m = mins % 60;
+      const dur = h > 0 ? `${h}h ${m}m` : `${m}m`;
+      $("since").innerHTML = `<b>${dur}</b> since last meal`;
+    }
+
+    function render() {
+      const d = getMeal();
+      const timeEl = $("time");
+      if (d) {
+        timeEl.classList.remove("empty");
+        timeEl.textContent = `${fmtTime(d)}`;
+        timeEl.title = d.toString();
+        $("time").dataset.day = fmtDay(d);
+      } else {
+        timeEl.classList.add("empty");
+        timeEl.textContent = "— not logged —";
+      }
+      renderSince(d);
+    }
+
+    function setStatus(msg, cls = "") { const s = $("status"); s.className = "status " + cls; s.textContent = msg; }
+
+    async function syncToSheet(d) {
+      const url = localStorage.getItem(K_URL);
+      if (!url) { setStatus("Saved on device · add a Sheet URL in settings to sync", "warn"); return; }
+      const payload = {
+        date: localDate(d),
+        time: fmtTime(d),
+        iso: d.toISOString(),
+      };
+      try {
+        // no-cors + text/plain avoids a CORS preflight to Apps Script; the write
+        // happens even though we can't read the (opaque) response.
+        await fetch(url, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload),
+        });
+        setStatus(`Synced to sheet · ${fmtTime(d)} (${fmtDay(d)})`, "ok");
+      } catch (e) {
+        setStatus("Saved on device · sync failed, will retry on next change", "warn");
+      }
+    }
+
+    function setMeal(d) {
+      localStorage.setItem(K_MEAL, d.toISOString());
+      render();
+      syncToSheet(d);
+    }
+
+    // --- events ---
+    $("ateNow").addEventListener("click", () => setMeal(new Date()));
+
+    $("editToggle").addEventListener("click", () => {
+      const box = $("editBox");
+      box.classList.toggle("open");
+      if (box.classList.contains("open")) {
+        $("editInput").value = toLocalInput(getMeal() || new Date());
+      }
+    });
+    $("cancelEdit").addEventListener("click", () => $("editBox").classList.remove("open"));
+    $("saveEdit").addEventListener("click", () => {
+      const v = $("editInput").value;
+      if (!v) return;
+      setMeal(new Date(v));
+      $("editBox").classList.remove("open");
+    });
+
+    // settings
+    $("endpoint").value = localStorage.getItem(K_URL) || "";
+    $("saveEndpoint").addEventListener("click", () => {
+      const u = $("endpoint").value.trim();
+      if (u) { localStorage.setItem(K_URL, u); setStatus("Sheet URL saved", "ok"); }
+      else { localStorage.removeItem(K_URL); setStatus("Sheet URL cleared", "warn"); }
+    });
+    $("syncNow").addEventListener("click", () => {
+      const d = getMeal();
+      if (d) syncToSheet(d); else setStatus("Nothing logged yet", "warn");
+    });
+
+    render();
+    setInterval(() => renderSince(getMeal()), 30000); // keep the fasting timer fresh
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js").catch(() => {});
+    }
+  </script>
+</body>
+</html>
