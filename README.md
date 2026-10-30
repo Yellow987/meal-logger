@@ -39,7 +39,7 @@ That's it. Tap **Ate now** (or edit the time) and it lands in your sheet.
 
 ## App link
 
-GitHub Pages: _added after first deploy_ → `https://yellow987.github.io/meal-logger/`
+GitHub Pages (live): **https://yellow987.github.io/meal-logger/**
 
 ## Dev
 
