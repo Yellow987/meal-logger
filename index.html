@@ -50,10 +50,18 @@
     .ghost:active { background: #1c1f28; transform: none; }
     .row { display: flex; gap: 10px; }
     .row > * { flex: 1; }
-    input[type="datetime-local"], input[type="url"] {
+    input[type="datetime-local"], input[type="url"], input[type="date"], input[type="text"], input[type="file"] {
       width: 100%; font: inherit; background: #0b0c10; color: var(--fg);
       border: 1px solid var(--line); border-radius: 12px; padding: 12px; color-scheme: dark;
     }
+    input[type="file"] { color: var(--muted); }
+    .preview {
+      display: none; width: 100%; max-height: 240px; object-fit: contain;
+      border-radius: 12px; border: 1px solid var(--line); background: #0b0c10; margin-top: 8px;
+    }
+    .preview.show { display: block; }
+    .photobox input, .photobox button { margin-top: 8px; }
+    .photobox p.hint { margin-bottom: 4px; }
     .edit { display: none; flex-direction: column; gap: 10px; }
     .edit.open { display: flex; }
     details { color: var(--muted); font-size: 13px; }
@@ -89,6 +97,17 @@
     </div>
 
     <div id="status" class="status"></div>
+
+    <details id="photo" class="photobox">
+      <summary>📸 Add progress photo</summary>
+      <p class="hint">Pick or snap a photo and set the date it was taken. Saves to your Drive and adds a row to the sheet's <b>Photos</b> tab.</p>
+      <input type="file" id="photoFile" accept="image/*" capture="environment" />
+      <img id="photoPreview" class="preview" alt="preview" />
+      <input type="date" id="photoDate" />
+      <input type="text" id="photoCaption" placeholder="Caption (optional)" />
+      <button id="uploadPhoto">Upload photo</button>
+      <div id="photoStatus" class="status"></div>
+    </details>
 
     <details id="settings">
       <summary>Sheet sync settings</summary>
@@ -212,6 +231,75 @@
     $("syncNow").addEventListener("click", () => {
       const d = getMeal();
       if (d) syncToSheet(d); else setStatus("Nothing logged yet", "warn");
+    });
+
+    // --- progress photo ---
+    $("photoDate").value = localDate(new Date());
+    let photoData = null; // { b64, mime } of the resized image, ready to send
+
+    function setPhotoStatus(msg, cls = "") { const s = $("photoStatus"); s.className = "status " + cls; s.textContent = msg; }
+
+    // Downscale on-device so a multi-MB phone photo becomes a small JPEG.
+    function resizeToDataURL(file, maxDim, quality) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("read failed"));
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => reject(new Error("decode failed"));
+          img.onload = () => {
+            const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+            const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+            const canvas = document.createElement("canvas");
+            canvas.width = w; canvas.height = h;
+            canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL("image/jpeg", quality));
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    $("photoFile").addEventListener("change", async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) { photoData = null; $("photoPreview").classList.remove("show"); return; }
+      setPhotoStatus("Processing photo…");
+      try {
+        const dataUrl = await resizeToDataURL(file, 1600, 0.82);
+        photoData = { b64: dataUrl.split(",")[1], mime: "image/jpeg" };
+        $("photoPreview").src = dataUrl;
+        $("photoPreview").classList.add("show");
+        const kb = Math.round(photoData.b64.length * 0.75 / 1024);
+        setPhotoStatus(`Ready · ~${kb} KB`, "ok");
+      } catch (err) {
+        photoData = null;
+        setPhotoStatus("Couldn't read that image", "warn");
+      }
+    });
+
+    $("uploadPhoto").addEventListener("click", async () => {
+      const url = localStorage.getItem(K_URL);
+      if (!url) { setPhotoStatus("Add a Sheet URL in settings first", "warn"); return; }
+      if (!photoData) { setPhotoStatus("Pick a photo first", "warn"); return; }
+      const date = $("photoDate").value || localDate(new Date());
+      const caption = $("photoCaption").value.trim();
+      setPhotoStatus("Uploading…");
+      try {
+        await fetch(url, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ type: "photo", date, caption, mime: photoData.mime, image: photoData.b64 }),
+        });
+        setPhotoStatus(`Uploaded for ${date} · check the Photos tab`, "ok");
+        photoData = null;
+        $("photoFile").value = "";
+        $("photoCaption").value = "";
+        $("photoPreview").classList.remove("show");
+      } catch (err) {
+        setPhotoStatus("Upload failed · try again", "warn");
+      }
     });
 
     render();

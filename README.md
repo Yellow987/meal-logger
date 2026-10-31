@@ -13,8 +13,11 @@ when I change the code and redeploy, your phone picks it up on next open.
 - **The app** (`index.html` + `manifest` + `sw.js`) — hosted on GitHub Pages.
   Saves the time in the browser immediately (localStorage), then POSTs it to…
 - **A Google Apps Script web app** (`apps-script/Code.gs`) bound to your sheet,
-  which upserts one row per day into a **Meals** tab (`Date | Last meal | Updated`).
-  This avoids putting any Google credentials in the app.
+  which upserts one row per day into a **Meals** tab (`Date | Last meal | Updated`),
+  and also accepts **progress photos** — saving the image to a `Last Meal Photos`
+  folder in your Drive and appending a row to a **Photos** tab
+  (`Date | ImageURL | FileId | Caption | Uploaded`). This avoids putting any
+  Google credentials in the app.
 
 ## Setup (one time)
 
@@ -36,6 +39,25 @@ when I change the code and redeploy, your phone picks it up on next open.
 2. Open it → **Sheet sync settings** → paste the `/exec` URL → **Save URL**.
 
 That's it. Tap **Ate now** (or edit the time) and it lands in your sheet.
+
+> If you redeploy an updated `Code.gs` that adds photo support, Google will ask
+> you to re-authorize — the script now also needs **Drive** access to store the
+> images. Use **Deploy → Manage deployments → ✏️ → Version: New version** so the
+> `/exec` URL stays the same.
+
+## Progress photos
+
+Open **📸 Add progress photo** in the app, pick or snap a photo, set the date it
+was taken, and tap **Upload photo**. The app downscales it on-device, sends it to
+the same endpoint, and the script:
+
+1. saves the image to a **Last Meal Photos** folder in your Drive (shared
+   view-only by link so a website can display it), and
+2. appends `Date | ImageURL | FileId | Caption | Uploaded` to a **Photos** tab.
+
+`ImageURL` is a direct-embeddable Drive link (`…/thumbnail?id=…&sz=w1600`); a
+site can read the `Photos` tab the same way it reads `Meals`. Photos are
+occasional, so each upload is its own row (no per-day upsert).
 
 ## App link
 
