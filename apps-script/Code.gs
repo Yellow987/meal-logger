@@ -8,6 +8,8 @@
  *   • Progress pic {type:"photo", date,
  *                   image(base64), mime,
  *                   caption}                 → saves to Drive, appends to "Photos"
+ *   • Private log {type:"private", date,
+ *                   count, note}             → appends a row to "Private"
  */
 
 function doPost(e) {
@@ -16,6 +18,7 @@ function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
     if (data.type === "photo") return handlePhoto(data);
+    if (data.type === "private") return handlePrivate(data);
     return handleMeal(data);
   } catch (err) {
     return json({ ok: false, error: String(err) });
@@ -99,6 +102,31 @@ function handlePhoto(data) {
   sh.appendRow([date, url, id, caption, new Date()]);
 
   return json({ ok: true, kind: "photo", date: date, url: url });
+}
+
+// --- private log: owner-only count per entry, one row each ------------------
+
+function handlePrivate(data) {
+  var date = String(data.date || "");
+  if (!date) throw new Error("missing date");
+  var note = String(data.note || "");
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName("Private");
+  if (!sh) {
+    sh = ss.insertSheet("Private");
+    sh.appendRow(["Date", "Count", "Note"]);
+  }
+  // Keep the Date column as plain text so the posted "2026-10-31" stays literal.
+  sh.getRange("A2:A").setNumberFormat("@");
+
+  // Store Count as a real number so the site's numeric-column detection picks it
+  // up; fall back to the raw value if it isn't parseable.
+  var n = Number(data.count);
+  var count = isNaN(n) ? String(data.count || "") : n;
+
+  sh.appendRow([date, count, note]);
+  return json({ ok: true, kind: "private", date: date, count: count });
 }
 
 function getPhotoFolder_() {

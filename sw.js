@@ -1,6 +1,6 @@
 // Minimal offline cache so the app opens and works without a connection.
 // Bump CACHE when you change files so clients pick up the new version.
-const CACHE = "last-meal-v2";
+const CACHE = "last-meal-v4";
 const ASSETS = ["./", "./index.html", "./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", (e) => {

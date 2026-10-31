@@ -14,10 +14,11 @@ when I change the code and redeploy, your phone picks it up on next open.
   Saves the time in the browser immediately (localStorage), then POSTs it to…
 - **A Google Apps Script web app** (`apps-script/Code.gs`) bound to your sheet,
   which upserts one row per day into a **Meals** tab (`Date | Last meal | Updated`),
-  and also accepts **progress photos** — saving the image to a `Last Meal Photos`
+  accepts **progress photos** — saving the image to a `Last Meal Photos`
   folder in your Drive and appending a row to a **Photos** tab
-  (`Date | ImageURL | FileId | Caption | Uploaded`). This avoids putting any
-  Google credentials in the app.
+  (`Date | ImageURL | FileId | Caption | Uploaded`) — and accepts **private log**
+  entries, appending a row to a **Private** tab (`Date | Count | Note`). This
+  avoids putting any Google credentials in the app.
 
 ## Setup (one time)
 
@@ -58,6 +59,14 @@ the same endpoint, and the script:
 `ImageURL` is a direct-embeddable Drive link (`…/thumbnail?id=…&sz=w1600`); a
 site can read the `Photos` tab the same way it reads `Meals`. Photos are
 occasional, so each upload is its own row (no per-day upsert).
+
+## Private log
+
+Open **🔒 Private log** in the app, pick a date, enter a whole-number **Count**
+and an optional **Note**, and tap **Log entry**. It appends a row to a **Private**
+tab (`Date | Count | Note`); `Count` is stored as a real number so a reader can
+chart it. This tab backs the website's owner-only (signed-in) section and is
+never shown publicly. Append-only — each entry is its own row.
 
 ## App link
 

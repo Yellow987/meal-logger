@@ -50,7 +50,7 @@
     .ghost:active { background: #1c1f28; transform: none; }
     .row { display: flex; gap: 10px; }
     .row > * { flex: 1; }
-    input[type="datetime-local"], input[type="url"], input[type="date"], input[type="text"], input[type="file"] {
+    input[type="datetime-local"], input[type="url"], input[type="date"], input[type="text"], input[type="number"], input[type="file"] {
       width: 100%; font: inherit; background: #0b0c10; color: var(--fg);
       border: 1px solid var(--line); border-radius: 12px; padding: 12px; color-scheme: dark;
     }
@@ -101,12 +101,22 @@
     <details id="photo" class="photobox">
       <summary>📸 Add progress photo</summary>
       <p class="hint">Pick or snap a photo and set the date it was taken. Saves to your Drive and adds a row to the sheet's <b>Photos</b> tab.</p>
-      <input type="file" id="photoFile" accept="image/*" capture="environment" />
+      <input type="file" id="photoFile" accept="image/*" />
       <img id="photoPreview" class="preview" alt="preview" />
       <input type="date" id="photoDate" />
       <input type="text" id="photoCaption" placeholder="Caption (optional)" />
       <button id="uploadPhoto">Upload photo</button>
       <div id="photoStatus" class="status"></div>
+    </details>
+
+    <details id="private" class="photobox">
+      <summary>🔒 Private log</summary>
+      <p class="hint">Log a private count for a date. Appends a row to the sheet's <b>Private</b> tab — owner-only on the site, never shown publicly.</p>
+      <input type="date" id="privDate" />
+      <input type="number" id="privCount" inputmode="numeric" min="0" step="1" placeholder="Count" />
+      <input type="text" id="privNote" placeholder="Note (optional)" />
+      <button id="savePrivate">Log entry</button>
+      <div id="privStatus" class="status"></div>
     </details>
 
     <details id="settings">
@@ -299,6 +309,35 @@
         $("photoPreview").classList.remove("show");
       } catch (err) {
         setPhotoStatus("Upload failed · try again", "warn");
+      }
+    });
+
+    // --- private log ---
+    $("privDate").value = localDate(new Date());
+    function setPrivStatus(msg, cls = "") { const s = $("privStatus"); s.className = "status " + cls; s.textContent = msg; }
+
+    $("savePrivate").addEventListener("click", async () => {
+      const url = localStorage.getItem(K_URL);
+      if (!url) { setPrivStatus("Add a Sheet URL in settings first", "warn"); return; }
+      const date = $("privDate").value || localDate(new Date());
+      const countRaw = $("privCount").value.trim();
+      if (countRaw === "") { setPrivStatus("Enter a count", "warn"); return; }
+      const count = Number(countRaw);
+      if (!Number.isFinite(count)) { setPrivStatus("Count must be a number", "warn"); return; }
+      const note = $("privNote").value.trim();
+      setPrivStatus("Logging…");
+      try {
+        await fetch(url, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ type: "private", date, count, note }),
+        });
+        setPrivStatus(`Logged ${count} for ${date}`, "ok");
+        $("privCount").value = "";
+        $("privNote").value = "";
+      } catch (err) {
+        setPrivStatus("Log failed · try again", "warn");
       }
     });
 
